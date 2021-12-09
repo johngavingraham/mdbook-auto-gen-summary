@@ -5,15 +5,16 @@ use mdbook::errors::Error;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 use mdbook::MDBook;
 use std::fs;
+use std::fs::DirEntry;
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
-use std::fs::DirEntry;
 
 const SUMMARY_FILE: &str = "SUMMARY.md";
 const README_FILE: &str = "README.md";
 
 const FIRST_LINE_AS_LINK_TEXT: &str = "first-line-as-link-text";
+const SORT: &str = "sort";
 
 #[derive(Debug)]
 pub struct MdFile {
@@ -46,6 +47,7 @@ impl Preprocessor for AutoGenSummary {
 
     fn run(&self, ctx: &PreprocessorContext, _book: Book) -> Result<Book, Error> {
         let mut use_first_line_as_link_text = false;
+        let mut sort = false;
 
         // In testing we want to tell the preprocessor to blow up by setting a
         // particular config value
@@ -57,6 +59,10 @@ impl Preprocessor for AutoGenSummary {
                 let v = nop_cfg.get(FIRST_LINE_AS_LINK_TEXT).unwrap();
                 use_first_line_as_link_text = v.as_bool().unwrap_or(false);
             }
+            if nop_cfg.contains_key(SORT) {
+                let v = nop_cfg.get(SORT).unwrap();
+                sort = v.as_bool().unwrap();
+            }
         }
 
         let source_dir = ctx
@@ -66,14 +72,14 @@ impl Preprocessor for AutoGenSummary {
             .unwrap()
             .to_string();
 
-        gen_summary(&source_dir, use_first_line_as_link_text);
+        gen_summary(&source_dir, use_first_line_as_link_text, sort);
 
         match MDBook::load(&ctx.root) {
             Ok(mdbook) => {
                 return Ok(mdbook.book);
             }
             Err(e) => {
-                panic!(e);
+                panic!("{}", e);
             }
         };
     }
@@ -93,13 +99,17 @@ fn md5(buf: &String) -> String {
     return md5_string;
 }
 
-pub fn gen_summary(source_dir: &String, use_first_line_as_link_text: bool) {
+pub fn gen_summary(source_dir: &String, use_first_line_as_link_text: bool, sort: bool) {
     let mut source_dir = source_dir.clone();
     if !source_dir.ends_with("/") {
         source_dir.push_str("/")
     }
-    let group = walk_dir(source_dir.clone().as_str());
-    let lines = gen_summary_lines(source_dir.clone().as_str(), &group, use_first_line_as_link_text);
+    let group = walk_dir(source_dir.clone().as_str(), sort);
+    let lines = gen_summary_lines(
+        source_dir.clone().as_str(),
+        &group,
+        use_first_line_as_link_text,
+    );
     let buff: String = lines.join("\n");
 
     let new_md5_string = md5(&buff);
@@ -113,7 +123,9 @@ pub fn gen_summary(source_dir: &String, use_first_line_as_link_text: bool) {
 
     let mut old_summary_file_content = String::new();
     let mut summary_file_reader = BufReader::new(summary_file);
-    summary_file_reader.read_to_string(&mut old_summary_file_content).unwrap();
+    summary_file_reader
+        .read_to_string(&mut old_summary_file_content)
+        .unwrap();
 
     let old_md5_string = md5(&old_summary_file_content);
 
@@ -138,7 +150,11 @@ fn count(s: &String) -> usize {
     cnt
 }
 
-fn gen_summary_lines(root_dir: &str, group: &MdGroup, use_first_line_as_link_text: bool) -> Vec<String> {
+fn gen_summary_lines(
+    root_dir: &str,
+    group: &MdGroup,
+    use_first_line_as_link_text: bool,
+) -> Vec<String> {
     let mut lines: Vec<String> = vec![];
 
     let path = group.path.replace(root_dir, "");
@@ -221,7 +237,7 @@ fn get_title(entry: &DirEntry) -> String {
     return title;
 }
 
-fn walk_dir(dir: &str) -> MdGroup {
+fn walk_dir(dir: &str, sort: bool) -> MdGroup {
     let read_dir = fs::read_dir(dir).unwrap();
     let name = Path::new(dir)
         .file_name()
@@ -242,7 +258,7 @@ fn walk_dir(dir: &str) -> MdGroup {
         let entry = entry.unwrap();
         // println!("{:?}", entry);
         if entry.file_type().unwrap().is_dir() {
-            let g = walk_dir(entry.path().to_str().unwrap());
+            let g = walk_dir(entry.path().to_str().unwrap(), sort);
             if g.has_readme {
                 group.group_list.push(g);
             }
@@ -272,6 +288,14 @@ fn walk_dir(dir: &str) -> MdGroup {
         };
 
         group.md_list.push(md);
+    }
+
+    if sort {
+        group
+            .group_list
+            .sort_by_key(|md_group| md_group.path.clone());
+
+        group.md_list.sort_by_key(|md_file| md_file.path.clone());
     }
 
     return group;

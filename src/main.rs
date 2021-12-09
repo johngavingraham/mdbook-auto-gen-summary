@@ -17,8 +17,23 @@ pub fn make_app() -> App<'static, 'static> {
         )
         .subcommand(
             SubCommand::with_name("gen")
-                .arg(Arg::with_name("dir").required(true).help("the dir of mdbook markdown src"))
-                .arg(Arg::with_name("title").required(false).short("t").help("make the first line of markdown file as line text in SUMMARY.md"))
+                .arg(
+                    Arg::with_name("dir")
+                        .required(true)
+                        .help("the dir of mdbook markdown src"),
+                )
+                .arg(
+                    Arg::with_name("title")
+                        .required(false)
+                        .short("t")
+                        .help("make the first line of markdown file as line text in SUMMARY.md"),
+                )
+                .arg(
+                    Arg::with_name("sort")
+                        .required(false)
+                        .short("s")
+                        .help("sort all entries"),
+                )
                 .about("gen SUMMARY.md"),
         )
 }
@@ -38,7 +53,9 @@ fn main() {
 
         let use_first_line_as_link_text = sub_args.is_present("title");
 
-        auto_gen_summary::gen_summary(&source_dir, use_first_line_as_link_text);
+        let sort: bool = sub_args.is_present("sort");
+
+        auto_gen_summary::gen_summary(&source_dir, use_first_line_as_link_text, sort);
     } else if let Err(e) = handle_preprocessing(&preprocessor) {
         eprintln!("{}", e);
         process::exit(1);

@@ -39,6 +39,7 @@ create-missing = false
 #use as mdbook preprocessor
 [preprocessor.auto-gen-summary]
 first-line-as-link-text = true # indicate mdbook to make the first line(default the file name) of markdown file as the link text in SUMMARY.md 
+sort = true # indicate mdbook to sort entries based on their path
 
 [output.html.fold]
 enable = true
